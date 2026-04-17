@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Text, useApp } from "ink";
 import { agentLoop, loadConfig, mlxServer } from "@qxl/core";
 import { defaultRegistry } from "@qxl/tools";
-import type { AgentEvent, Message, ModelEntry } from "@qxl/core";
+import type { Message, ModelEntry } from "@qxl/core";
 import { Transcript } from "./components/transcript";
 import { ToolCard } from "./components/tool-card";
 import { StatusBar } from "./components/status-bar";
 import { Input } from "./components/input";
 import { ModelPicker } from "./components/model-picker";
+import { Spinner } from "./components/spinner";
 
 interface ToolCardData { callId: string; name: string; params: string; result?: string; isError: boolean; }
 
@@ -33,12 +34,12 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
   const [turn, setTurn] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const cancelledRef = useRef(false);
   const busyRef = useRef(false);
   const startRef = useRef(Date.now());
   const didInit = useRef(false);
 
-  // Load config on mount
   useEffect(() => {
     loadConfig({ cwd }).then((cfg) => {
       setModels(cfg.models);
@@ -48,8 +49,6 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
         setPhase("picking-model");
       }
     });
-
-    // Cleanup: stop server when app exits
     return () => { mlxServer.stop(); };
   }, []);
 
@@ -59,7 +58,6 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
     try {
       await mlxServer.start(model);
       setPhase("ready");
-      // If there's an initial prompt, kick off the agent immediately
       if (initialPrompt && !didInit.current) {
         didInit.current = true;
         setMessages([{ role: "user", content: initialPrompt } as Message]);
@@ -75,6 +73,7 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
     cancelledRef.current = false;
     busyRef.current = true;
     setBusy(true);
+    setGenerating(true);
     setStreamingDelta("");
     setToolCards([]);
     startRef.current = Date.now();
@@ -93,15 +92,20 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
     for await (const event of loop) {
       setElapsed(Date.now() - startRef.current);
       if (event.type === "token") {
+        setGenerating(false);
         delta += event.delta;
         setStreamingDelta(delta);
         setTokens((t) => t + 1);
       }
       if (event.type === "tool_start") {
         setToolCards((prev) => [...prev, { callId: event.callId, name: event.name, params: event.params, isError: false }]);
+        setGenerating(false);
+        setStreamingDelta("");
+        delta = "";
       }
       if (event.type === "tool_result") {
         setToolCards((prev) => prev.map((c) => c.callId === event.callId ? { ...c, result: event.content, isError: event.isError } : c));
+        setGenerating(true);
       }
       if (event.type === "turn_end") {
         if (delta) {
@@ -110,11 +114,14 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
           setStreamingDelta("");
         }
         setTurn((t) => t + 1);
+        setGenerating(false);
       }
       if (event.type === "done") break;
     }
+
     busyRef.current = false;
     setBusy(false);
+    setGenerating(false);
   }, [cwd]);
 
   const handleModelSelect = useCallback((entry: ModelEntry) => {
@@ -136,10 +143,12 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
     }
   }, [exit]);
 
-  // --- Render phases ---
-
   if (phase === "loading-config") {
-    return <Box><Text dimColor>Loading config…</Text></Box>;
+    return (
+      <Box paddingX={2} paddingY={1}>
+        <Spinner label="Loading config…" />
+      </Box>
+    );
   }
 
   if (phase === "picking-model") {
@@ -147,34 +156,39 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
   }
 
   if (phase === "starting-server") {
+    const shortName = activeModel.split("/").pop() ?? activeModel;
     return (
-      <Box flexDirection="column" paddingY={1}>
-        <Text color="cyan" bold>  Starting MLX server…</Text>
-        <Text dimColor>  Model: {activeModel}</Text>
-        <Text dimColor>  This may take a minute while the model loads into memory.</Text>
-        <Text dimColor>  First run with a new model will also download weights.</Text>
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Spinner label={`Starting ${shortName}…`} />
+        <Box marginTop={1}>
+          <Text dimColor>Loading weights into memory. First run may download the model.</Text>
+        </Box>
       </Box>
     );
   }
 
   if (phase === "error") {
     return (
-      <Box flexDirection="column" paddingY={1}>
-        <Text color="red" bold>  Failed to start MLX server</Text>
-        <Text color="red">{serverError}</Text>
-        <Text dimColor>  Ensure mlx_lm is installed: source .venv/bin/activate && pip install mlx-lm</Text>
-        <Text dimColor>  Or set QXL_PYTHON to your Python 3.12 executable.</Text>
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Text color="red" bold>✗ Failed to start MLX server</Text>
+        <Box marginTop={1}>
+          <Text color="red">{serverError}</Text>
+        </Box>
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>• Is mlx_lm installed? Run: source .venv/bin/activate && pip install mlx-lm</Text>
+          <Text dimColor>• Set QXL_PYTHON=/path/to/python3.12 to override the Python executable</Text>
+        </Box>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column" height="100%">
-      <Transcript messages={messages} streamingDelta={streamingDelta} />
+      <Transcript messages={messages} streamingDelta={streamingDelta} generating={generating} />
       {toolCards.map((tc, i) => (
         <ToolCard key={i} name={tc.name} params={tc.params} result={tc.result} isError={tc.isError} />
       ))}
-      <StatusBar model={activeModel} tokens={tokens} turn={turn} elapsedMs={elapsed} />
+      <StatusBar model={activeModel} tokens={tokens} turn={turn} elapsedMs={elapsed} busy={busy} />
       <Input onSubmit={handleSubmit} onCancel={handleCancel} disabled={busy} />
     </Box>
   );
