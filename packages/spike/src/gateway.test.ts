@@ -7,7 +7,7 @@ test("streams at least one token from local server", async () => {
   const tokens: string[] = [];
   await streamCompletion({
     baseURL: "http://127.0.0.1:8090/v1",
-    model: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+    model: "Qwen/Qwen2.5-0.5B-Instruct",
     messages: [{ role: "user", content: "Say exactly: hello" }],
     onToken: (t) => tokens.push(t),
     onDone: () => {},
@@ -22,7 +22,7 @@ test("returns a tool call for a file-reading prompt", async () => {
 
   await streamCompletion({
     baseURL: "http://127.0.0.1:8090/v1",
-    model: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+    model: "Qwen/Qwen2.5-0.5B-Instruct",
     messages: [
       {
         role: "user",
