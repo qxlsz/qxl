@@ -111,7 +111,7 @@ bun run build      # build standalone binary to dist/qxl
 | Milestone | Status | Scope |
 |-----------|--------|-------|
 | M0 — MLX spike | Done | Streaming + tool calling validated against mlx_lm.server |
-| M1 — Core harness | In progress | Agent loop, file tools, sessions, TUI |
+| M1 — Core harness | Done | Agent loop, file tools (Read/Write/Edit/MultiEdit/Glob/Grep), sessions, config, memory, TUI, CLI |
 | M2 — Hooks & permissions | Planned | Pre/post-tool hooks, allow/deny rules |
 | M3 — MCP | Planned | Model Context Protocol server support |
 | M4 — Research mode | Planned | Gemma-4-E4B-OBLITERATED integration |

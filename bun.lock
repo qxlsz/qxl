@@ -58,6 +58,9 @@
     "packages/tools": {
       "name": "@qxl/tools",
       "version": "0.1.0",
+      "dependencies": {
+        "@qxl/gateway": "workspace:*",
+      },
       "devDependencies": {
         "bun-types": "latest",
       },
@@ -67,6 +70,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@qxl/core": "workspace:*",
+        "@qxl/tools": "workspace:*",
         "ink": "^5.0.1",
         "react": "^18.3.1",
       },
