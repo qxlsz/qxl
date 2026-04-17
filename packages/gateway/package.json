@@ -1,0 +1,12 @@
+{
+  "name": "@qxl/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "openai": "^4.97.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

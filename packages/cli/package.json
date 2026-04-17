@@ -1,0 +1,15 @@
+{
+  "name": "@qxl/cli",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "bin": { "qxl": "src/index.ts" },
+  "dependencies": {
+    "@qxl/core": "workspace:*",
+    "@qxl/tui": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
