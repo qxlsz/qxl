@@ -6,6 +6,7 @@ export interface RunTUIOptions {
   initialPrompt?: string;
   sessionId?: string;
   cwd?: string;
+  forceModel?: string;
 }
 
 export function runTUI(opts: RunTUIOptions = {}): void {
@@ -14,6 +15,7 @@ export function runTUI(opts: RunTUIOptions = {}): void {
       initialPrompt={opts.initialPrompt}
       sessionId={opts.sessionId}
       cwd={opts.cwd ?? process.cwd()}
+      forceModel={opts.forceModel}
     />,
     { exitOnCtrlC: false }
   );

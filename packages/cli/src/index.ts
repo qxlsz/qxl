@@ -24,7 +24,7 @@ const program = new Command("qxl")
       const last = list.find((s) => s.cwd === cwd);
       if (last) sessionId = last.id;
     }
-    runTUI({ initialPrompt: prompt, sessionId });
+    runTUI({ initialPrompt: prompt, sessionId, forceModel: opts.model });
   });
 
 program

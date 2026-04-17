@@ -1,8 +1,14 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 
+export interface ModelEntry {
+  id: string;
+  label: string;
+}
+
 export interface QxlConfig {
   baseURL: string;
+  models: ModelEntry[];
   router: {
     roles: {
       coding: string;
@@ -12,12 +18,20 @@ export interface QxlConfig {
   env?: Record<string, string>;
 }
 
+const DEFAULT_MODELS: ModelEntry[] = [
+  { id: "mlx-community/Qwen3.6-35B-A3B-4bit-DWQ", label: "Qwen3.6 35B MoE — primary coding (18 GB)" },
+  { id: "OBLITERATUS/gemma-4-E4B-it-OBLITERATED", label: "Gemma 4 E4B OBLITERATED — research/uncensored" },
+  { id: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit", label: "Qwen2.5 Coder 7B — fast coding (3.5 GB)" },
+  { id: "Qwen/Qwen2.5-0.5B-Instruct", label: "Qwen2.5 0.5B — local debug (tiny)" },
+];
+
 const DEFAULTS: QxlConfig = {
   baseURL: process.env.QXL_BASE_URL ?? "http://127.0.0.1:8090/v1",
+  models: DEFAULT_MODELS,
   router: {
     roles: {
-      coding: process.env.QXL_MODEL ?? "Qwen/Qwen2.5-0.5B-Instruct",
-      fast: process.env.QXL_MODEL ?? "Qwen/Qwen2.5-0.5B-Instruct",
+      coding: process.env.QXL_MODEL ?? "mlx-community/Qwen3.6-35B-A3B-4bit-DWQ",
+      fast: process.env.QXL_MODEL ?? "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
     },
   },
 };
@@ -34,7 +48,10 @@ function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial
   const result = { ...base };
   for (const [k, v] of Object.entries(override)) {
     if (v !== null && typeof v === "object" && !Array.isArray(v) && typeof (base as Record<string, unknown>)[k] === "object") {
-      (result as Record<string, unknown>)[k] = deepMerge((base as Record<string, unknown>)[k] as Record<string, unknown>, v as Record<string, unknown>);
+      (result as Record<string, unknown>)[k] = deepMerge(
+        (base as Record<string, unknown>)[k] as Record<string, unknown>,
+        v as Record<string, unknown>
+      );
     } else if (v !== undefined) {
       (result as Record<string, unknown>)[k] = v;
     }
