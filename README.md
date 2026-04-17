@@ -33,15 +33,22 @@ pip install mlx-lm
 ## Quick start
 
 ```bash
-# Start the MLX server
-bash scripts/mlx-server.sh mlx-community/Qwen2.5-Coder-7B-Instruct-4bit 8090
-
 # Install dependencies
 bun install
 
-# Run qxl
-bun run dev "refactor the auth module to use async/await"
+# Just run qxl — it starts the model server automatically
+bun run dev
+# or with the compiled binary:
+./dist/qxl
+
+# With a direct prompt (skips interactive input):
+bun run dev "refactor this to use async/await"
+
+# Skip the model picker (if you know which model you want):
+bun run dev --model "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit" "explain this code"
 ```
+
+> **Note:** qxl automatically spawns, manages, and stops the `mlx_lm.server` process. No separate server step needed.
 
 ---
 
@@ -62,6 +69,7 @@ Override via environment variables:
 ```bash
 QXL_BASE_URL=http://127.0.0.1:8090/v1
 QXL_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit-DWQ
+QXL_PYTHON=/path/to/python3.12   # use a specific Python if not using .venv/
 ```
 
 Or via `.qxl/settings.json` in your workspace:

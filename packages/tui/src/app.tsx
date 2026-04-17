@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Box, useApp } from "ink";
-import { agentLoop, loadConfig } from "@qxl/core";
+import { Box, Text, useApp } from "ink";
+import { agentLoop, loadConfig, mlxServer } from "@qxl/core";
 import { defaultRegistry } from "@qxl/tools";
 import type { AgentEvent, Message, ModelEntry } from "@qxl/core";
 import { Transcript } from "./components/transcript";
@@ -11,6 +11,8 @@ import { ModelPicker } from "./components/model-picker";
 
 interface ToolCardData { callId: string; name: string; params: string; result?: string; isError: boolean; }
 
+type Phase = "loading-config" | "picking-model" | "starting-server" | "ready" | "error";
+
 interface AppProps {
   initialPrompt?: string;
   sessionId?: string;
@@ -20,9 +22,10 @@ interface AppProps {
 
 export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
   const { exit } = useApp();
+  const [phase, setPhase] = useState<Phase>("loading-config");
   const [models, setModels] = useState<ModelEntry[]>([]);
-  const [activeModel, setActiveModel] = useState<string | null>(forceModel ?? null);
-  const [baseURL, setBaseURL] = useState("http://127.0.0.1:8090/v1");
+  const [activeModel, setActiveModel] = useState<string>(forceModel ?? "");
+  const [serverError, setServerError] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingDelta, setStreamingDelta] = useState("");
   const [toolCards, setToolCards] = useState<ToolCardData[]>([]);
@@ -31,17 +34,46 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
   const cancelledRef = useRef(false);
+  const busyRef = useRef(false);
   const startRef = useRef(Date.now());
+  const didInit = useRef(false);
 
+  // Load config on mount
   useEffect(() => {
     loadConfig({ cwd }).then((cfg) => {
       setModels(cfg.models);
-      setBaseURL(cfg.baseURL);
+      if (forceModel) {
+        startServer(forceModel);
+      } else {
+        setPhase("picking-model");
+      }
     });
+
+    // Cleanup: stop server when app exits
+    return () => { mlxServer.stop(); };
   }, []);
+
+  const startServer = useCallback(async (model: string) => {
+    setActiveModel(model);
+    setPhase("starting-server");
+    try {
+      await mlxServer.start(model);
+      setPhase("ready");
+      // If there's an initial prompt, kick off the agent immediately
+      if (initialPrompt && !didInit.current) {
+        didInit.current = true;
+        setMessages([{ role: "user", content: initialPrompt } as Message]);
+        runAgent(initialPrompt, model, sessionId);
+      }
+    } catch (err) {
+      setServerError((err as Error).message);
+      setPhase("error");
+    }
+  }, [initialPrompt, sessionId]);
 
   const runAgent = useCallback(async (prompt: string, model: string, sid?: string) => {
     cancelledRef.current = false;
+    busyRef.current = true;
     setBusy(true);
     setStreamingDelta("");
     setToolCards([]);
@@ -50,7 +82,7 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
     const loop = agentLoop({
       prompt,
       sessionId: sid,
-      baseURL,
+      baseURL: mlxServer.baseURL,
       model,
       cwd,
       registry: defaultRegistry,
@@ -81,23 +113,13 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
       }
       if (event.type === "done") break;
     }
+    busyRef.current = false;
     setBusy(false);
-  }, [cwd, baseURL]);
+  }, [cwd]);
 
   const handleModelSelect = useCallback((entry: ModelEntry) => {
-    setActiveModel(entry.id);
-    if (initialPrompt) {
-      setMessages([{ role: "user", content: initialPrompt } as Message]);
-      runAgent(initialPrompt, entry.id, sessionId);
-    }
-  }, [initialPrompt, sessionId, runAgent]);
-
-  useEffect(() => {
-    if (forceModel && initialPrompt) {
-      setMessages([{ role: "user", content: initialPrompt } as Message]);
-      runAgent(initialPrompt, forceModel, sessionId);
-    }
-  }, [forceModel]);
+    startServer(entry.id);
+  }, [startServer]);
 
   const handleSubmit = useCallback((text: string) => {
     if (!activeModel) return;
@@ -106,21 +128,44 @@ export function App({ initialPrompt, sessionId, cwd, forceModel }: AppProps) {
   }, [activeModel, runAgent]);
 
   const handleCancel = useCallback(() => {
-    if (busy) {
+    if (busyRef.current) {
       cancelledRef.current = true;
     } else {
+      mlxServer.stop();
       exit();
     }
-  }, [busy, exit]);
+  }, [exit]);
 
-  // Show model picker if no model selected yet
-  if (!activeModel && models.length > 0) {
+  // --- Render phases ---
+
+  if (phase === "loading-config") {
+    return <Box><Text dimColor>Loading config…</Text></Box>;
+  }
+
+  if (phase === "picking-model") {
     return <ModelPicker models={models} onSelect={handleModelSelect} />;
   }
 
-  // Loading config
-  if (!activeModel) {
-    return <Box><StatusBar model="loading…" tokens={0} turn={0} elapsedMs={0} /></Box>;
+  if (phase === "starting-server") {
+    return (
+      <Box flexDirection="column" paddingY={1}>
+        <Text color="cyan" bold>  Starting MLX server…</Text>
+        <Text dimColor>  Model: {activeModel}</Text>
+        <Text dimColor>  This may take a minute while the model loads into memory.</Text>
+        <Text dimColor>  First run with a new model will also download weights.</Text>
+      </Box>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <Box flexDirection="column" paddingY={1}>
+        <Text color="red" bold>  Failed to start MLX server</Text>
+        <Text color="red">{serverError}</Text>
+        <Text dimColor>  Ensure mlx_lm is installed: source .venv/bin/activate && pip install mlx-lm</Text>
+        <Text dimColor>  Or set QXL_PYTHON to your Python 3.12 executable.</Text>
+      </Box>
+    );
   }
 
   return (
