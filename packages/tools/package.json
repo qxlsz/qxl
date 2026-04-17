@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "main": "src/index.ts",
+  "dependencies": {
+    "@qxl/gateway": "workspace:*"
+  },
   "devDependencies": {
     "bun-types": "latest"
   }
